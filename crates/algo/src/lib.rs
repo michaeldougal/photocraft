@@ -52,6 +52,7 @@ mod lens_flare_data;
 pub mod liquify;
 pub mod magnetic;
 pub mod matting;
+pub mod nearest_seed;
 mod noise;
 pub mod nonlocal;
 mod oil;

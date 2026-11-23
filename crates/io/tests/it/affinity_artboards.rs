@@ -15,7 +15,8 @@ fn boards(doc: &Document) -> Vec<(String, Rect)> {
 }
 
 fn pixels(doc: &Document) -> Vec<u8> {
-    let bytes = export(doc, "boards.png", &ExportOptions::default()).unwrap().bytes;
+    // Edge colour fill off, so the clipped overflow reads as the composite leaves it.
+    let bytes = export(doc, "boards.png", &ExportOptions { png_edge_fill: false, ..Default::default() }).unwrap().bytes;
     photocraft_codecs::decode(&bytes).unwrap().data().to_vec()
 }
 

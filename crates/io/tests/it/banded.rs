@@ -71,7 +71,8 @@ fn single_layer_native_export_strips_opaque_alpha() {
     d.layers.truncate(1);
     // A fractional edge exercises coverage rather than merely cropping raw samples.
     d.layers[0].vector_mask = Some(photocraft_doc::VectorMask::new(photocraft_vector::shapes::rect(0.0, 0.0, 4.5, 4.0)));
-    let r = export(&d, "x.png", &ExportOptions::default()).unwrap();
+    // Edge colour fill off: every sample, the masked-out ones included, is compared with the composite.
+    let r = export(&d, "x.png", &ExportOptions { png_edge_fill: false, ..Default::default() }).unwrap();
     let img = photocraft_codecs::decode(&r.bytes).unwrap();
     assert_eq!(img.sample_type(), photocraft_codecs::SampleType::U16);
     assert!(img.layout().has_alpha());

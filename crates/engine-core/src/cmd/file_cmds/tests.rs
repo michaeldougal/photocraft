@@ -1740,6 +1740,40 @@ fn save_a_copy_writes_pdf_spot_plates_unless_asked_not_to() {
     }
 }
 
+/// A PNG save gives transparent pixels the colour of the nearest visible pixel unless
+/// `pngEdgeFill` is false; anything but a boolean is refused before anything is written.
+#[test]
+fn png_saves_fill_transparent_pixels_unless_asked_not_to() {
+    let dir = tmp("png-edge-fill");
+    let mut s = crate::session();
+    s.execute("file.new", json!({"width": 16, "height": 4, "background": "transparent"})).unwrap();
+    s.execute("select.rect", json!({"x": 0, "y": 0, "width": 4, "height": 4})).unwrap();
+    s.execute("edit.fill", json!({"color": "#ff0000"})).unwrap();
+    // The colour of the transparent pixel at (12, 0), which keeps alpha 0 either way.
+    let mut far = |params: Value| {
+        let out = join(&dir, "a.png");
+        let mut p = params.clone();
+        p["path"] = json!(out);
+        s.execute("file.saveACopy", p).unwrap();
+        let img = photocraft_codecs::decode(&std::fs::read(&out).unwrap())
+            .unwrap()
+            .convert(photocraft_codecs::ChannelLayout::Rgba, photocraft_codecs::SampleType::U8);
+        let px: [u8; 4] = img.data()[12 * 4..13 * 4].try_into().unwrap();
+        assert_eq!(px[3], 0, "{params}");
+        px
+    };
+    for params in [json!({}), json!({"pngEdgeFill": true}), json!({"pngEdgeFill": null})] {
+        assert_eq!(far(params.clone())[..3], [255, 0, 0], "{params}");
+    }
+    assert_ne!(far(json!({"pngEdgeFill": false}))[..3], [255, 0, 0]);
+    for bad in [json!(1), json!("true"), json!([true])] {
+        let out = join(&dir, "bad.png");
+        let r = s.execute("file.saveACopy", json!({"path": out, "pngEdgeFill": bad}));
+        assert!(matches!(r, Err(EngineError::BadParams { .. })), "{bad}: {r:?}");
+        assert!(!std::path::Path::new(&out).exists(), "{bad}: nothing written");
+    }
+}
+
 /// `dpxBits` picks a DPX's bits per sample (byte 803 of the header); unset, it follows the
 /// document's depth. Anything but 8, 10, 12 or 16 is refused before anything is written.
 #[test]

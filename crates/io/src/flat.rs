@@ -1908,6 +1908,7 @@ pub fn export_flat_with_renderer(
                 if format == Format::Tiff {
                     warnings.extend(crate::tiff_layers::flat_transparency_and_channels(doc, &mut img, opts.tiff_transparency, opts.preserve_alpha)?);
                 }
+                png_edge_fill(&mut img, format, opts);
                 // Drain only once encoding succeeded: if it fails, the queued diagnostics stay
                 // with the renderer for the caller to report alongside the error.
                 let mut res = encode_image(&img, format, opts, warnings)?;
@@ -1961,7 +1962,16 @@ pub fn export_flat_with_renderer(
     if format == Format::Tiff {
         warnings.extend(crate::tiff_layers::flat_transparency_and_channels(doc, &mut img, opts.tiff_transparency, opts.preserve_alpha)?);
     }
+    png_edge_fill(&mut img, format, opts);
     encode_image(&img, format, opts, warnings)
+}
+
+/// A PNG's fully transparent pixels given the colour of the nearest visible pixel, when
+/// [`ExportOptions::png_edge_fill`] asks for it ([`crate::edge_fill`]).
+fn png_edge_fill(img: &mut Image, format: Format, opts: &ExportOptions) {
+    if format == Format::Png && opts.png_edge_fill {
+        crate::edge_fill::fill_transparent(img);
+    }
 }
 
 /// Export As's Metadata: None drops the XMP packet, which lists the text of every type layer and
@@ -2156,6 +2166,11 @@ fn stream_png_with_renderer(
     if encode.png_interlaced {
         encode.png_interlaced = false;
         late.push(format!("written without interlacing: a {w} × {h} px PNG is written a band of rows at a time"));
+    }
+    if opts.png_edge_fill && alpha {
+        late.push(format!(
+            "transparent pixels keep their own colours (no edge colour fill): a {w} × {h} px PNG is written a band of rows at a time, and the fill needs the whole image"
+        ));
     }
     // One blank row through the same steps as the bands gives the file's layout, profile and
     // metadata (and their warnings) before anything is rendered.
@@ -2577,6 +2592,11 @@ fn export_mode_specific(doc: &Document, format: Format, opts: &ExportOptions, ct
             if opts.encode.png_interlaced {
                 warnings.push("written without interlacing: the palette PNG exporter does not interlace".into());
             }
+            if let Some(t) = table.transparent.filter(|t| opts.png_edge_fill && idx.contains(t)) {
+                warnings.push(format!(
+                    "transparent pixels keep palette entry {t}'s colour (no edge colour fill): a palette PNG has one colour for all of them; convert to RGB for the fill"
+                ));
+            }
             if opts.encode.embed_metadata && opts.xmp == XmpEmbed::All && !doc.metadata.text.is_empty() {
                 warnings.push("text metadata is not supported by the palette PNG exporter; it will be dropped".into());
             }
@@ -2828,7 +2848,10 @@ mod streamed_png_tests {
 
     /// Streamed in bands of `rows`, `doc` gives the pixels, warnings and header chunks of the
     /// whole-image export.
+    /// Edge colour fill is off for both: it needs the whole image, so the streamed export skips it
+    /// (`streamed_exports_say_they_skip_the_edge_fill`).
     fn same_as_whole(doc: &Document, rows: i32, opts: &ExportOptions) -> ExportResult {
+        let opts = &ExportOptions { png_edge_fill: false, ..opts.clone() };
         let whole = export_flat(doc, Format::Png, opts).unwrap();
         let streamed = export_png_streamed(doc, opts, &Interrupt::NONE, rows).unwrap();
         let (a, b) = (decoded(&whole.bytes), decoded(&streamed.bytes));
@@ -2922,6 +2945,21 @@ mod streamed_png_tests {
         let seen = seen.into_inner().unwrap();
         assert!(seen.windows(2).all(|w| w[0] <= w[1]), "progress went back: {seen:?}");
         assert_eq!(seen.last(), Some(&1.0));
+    }
+
+    /// The edge colour fill needs the whole image: a transparent streamed PNG says it was not
+    /// applied, and an opaque one has nothing to fill and says nothing.
+    #[test]
+    fn streamed_exports_say_they_skip_the_edge_fill() {
+        let mut doc = Document::new("edges", Size::new(40, 30), ColorMode::Rgb, SampleType::U8);
+        doc.layers = vec![layer(&doc, &[(Rect::new(0, 0, 20, 30), &[0.5, 0.5, 0.5, 1.0])])].into();
+        let says = |doc: &Document| {
+            let r = export_png_streamed(doc, &ExportOptions::default(), &Interrupt::NONE, 7).unwrap();
+            r.warnings.iter().any(|w| w.contains("edge colour fill"))
+        };
+        assert!(says(&doc));
+        doc.layers = vec![layer(&doc, &[(doc.bounds(), &[0.5, 0.5, 0.5, 1.0])])].into();
+        assert!(!says(&doc));
     }
 
     #[test]
@@ -3423,5 +3461,52 @@ mod bilevel_tiff_tests {
         assert_eq!(second.document.mode, ColorMode::Bitmap);
         let first = import_tiff_page("pages.tif", &bytes, Some(0)).unwrap();
         assert_eq!(first.document.mode, ColorMode::Grayscale);
+    }
+}
+
+#[cfg(test)]
+mod edge_fill_tests {
+    use super::*;
+
+    /// A shape on a transparent canvas, the left `cover` columns filled with `rgb`.
+    fn shape(cover: i32, rgb: [f32; 3]) -> Document {
+        let mut doc = Document::new("shape", Size::new(24, 8), ColorMode::Rgb, SampleType::U8);
+        let mut s = Surface::new(doc.pixel_format());
+        s.fill_rect(Rect::new(0, 0, cover, 8), &[rgb[0], rgb[1], rgb[2], 1.0]);
+        doc.layers = vec![Layer::new("Shape", LayerContent::Raster(s))].into();
+        doc
+    }
+
+    fn png(doc: &Document, fill: bool) -> Image {
+        let opts = ExportOptions { png_edge_fill: fill, ..Default::default() };
+        codecs::decode(&export_flat(doc, Format::Png, &opts).unwrap().bytes).unwrap().convert(ChannelLayout::Rgba, CSample::U8)
+    }
+
+    /// By default the transparent pixels of an exported PNG carry the shape's colour, so a
+    /// filtered (bilinear) sample across the edge stays that colour; they stay transparent and
+    /// the visible pixels are unchanged. Turned off, they don't carry it.
+    #[test]
+    fn png_export_fills_transparent_pixels_with_the_edge_colour() {
+        let doc = shape(6, [0.9, 0.6, 0.1]);
+        let (filled, plain) = (png(&doc, true), png(&doc, false));
+        let px = |img: &Image, x: usize| -> [u8; 4] { img.data()[x * 4..x * 4 + 4].try_into().unwrap() };
+        let edge = px(&filled, 5);
+        assert_eq!(edge[3], 255);
+        for x in 6..24 {
+            assert_eq!(px(&filled, x)[3], 0, "x = {x} stays transparent");
+            assert_eq!(px(&filled, x)[..3], edge[..3], "x = {x} takes the edge colour");
+        }
+        assert_ne!(px(&plain, 12)[..3], edge[..3], "without the fill the colour is not the edge's");
+        let alpha = |img: &Image| img.data().chunks(4).map(|p| p[3]).collect::<Vec<_>>();
+        assert_eq!(alpha(&filled), alpha(&plain));
+        assert_eq!(filled.data()[..6 * 4], plain.data()[..6 * 4]);
+    }
+
+    /// Only PNG is touched: a TGA keeps the colours the composite gives transparent pixels.
+    #[test]
+    fn other_formats_are_left_alone() {
+        let doc = shape(6, [0.9, 0.6, 0.1]);
+        let tga = |fill: bool| export_flat(&doc, Format::Tga, &ExportOptions { png_edge_fill: fill, ..Default::default() }).unwrap().bytes;
+        assert!(tga(true) == tga(false));
     }
 }

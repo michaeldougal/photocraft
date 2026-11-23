@@ -225,6 +225,11 @@ pub struct SaveParams {
     /// (a Multichannel document as plates alone). On by default; false writes the image only.
     #[serde(default, rename = "pdfSpotPlates")]
     pub pdf_spot_plates: Option<bool>,
+    /// PNG: give fully transparent pixels the colour of the nearest visible pixel, so a renderer
+    /// that filters the image shows no dark fringe at its edges. On by default; false keeps their
+    /// own colours (headless mode only).
+    #[serde(default, rename = "pngEdgeFill")]
+    pub png_edge_fill: Option<bool>,
     /// .pcraft: request the flattened document at its canvas size as `composite/full.png`.
     /// The save may omit it; check the manifest's `full_composite` member. Off by default.
     #[serde(default, rename = "pcraftFullComposite")]
@@ -1324,6 +1329,7 @@ impl PhotocraftMcp {
                 p.pcraft_full_composite.is_some().then_some("pcraftFullComposite"),
                 dpx_bits.is_some().then_some("dpxBits"),
                 p.pdf_spot_plates.is_some().then_some("pdfSpotPlates"),
+                p.png_edge_fill.is_some().then_some("pngEdgeFill"),
                 p.index.is_some().then_some("index"),
             ]
             .into_iter()
@@ -1367,6 +1373,7 @@ impl PhotocraftMcp {
                     tiff_transparency: p.tiff_transparency,
                     tga_bits,
                     pdf_spot_plates: p.pdf_spot_plates.unwrap_or(true),
+                    png_edge_fill: p.png_edge_fill.unwrap_or(true),
                     pcraft_full_composite: p.pcraft_full_composite.unwrap_or(false),
                     ..Default::default()
                 };

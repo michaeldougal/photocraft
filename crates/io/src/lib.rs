@@ -55,6 +55,7 @@ pub mod guides_map;
 mod png_steps;
 pub use gradient_bake::{Method as GradientMethod, bake as bake_gradient, bake_smooth_opacity as bake_gradient_smooth_opacity};
 mod duotone_map;
+mod edge_fill;
 mod kra;
 pub mod linked;
 pub mod memory;
@@ -447,6 +448,13 @@ pub struct ExportOptions {
     /// omit it; check the manifest's `full_composite` member ([`photocraft_format::read_full_composite`]
     /// reads it). Off by default.
     pub pcraft_full_composite: bool,
+    /// PNG: give every fully transparent pixel the colour of the nearest pixel that isn't, keeping
+    /// it fully transparent, so a renderer that filters the image (a game engine scaling a
+    /// texture) blends edges in the shape's own colour instead of a dark fringe. On by default;
+    /// `false` (`"pngEdgeFill": false`) writes transparent pixels with the colours the composite
+    /// gives them. Palette (Indexed Color) PNGs and PNGs written a band at a time are left as
+    /// they are, with a warning.
+    pub png_edge_fill: bool,
 }
 
 impl Default for ExportOptions {
@@ -467,6 +475,7 @@ impl Default for ExportOptions {
             read_linked_files: true,
             pdf_spot_plates: true,
             pcraft_full_composite: false,
+            png_edge_fill: true,
         }
     }
 }

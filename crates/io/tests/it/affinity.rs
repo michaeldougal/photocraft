@@ -50,7 +50,8 @@ fn preview_is_named_and_warns_at_its_actual_size() {
     assert!(r.source_read_only && r.preview_only);
     assert!(r.warnings[0].contains("2×1"));
     assert!(r.warnings[0].contains("native Affinity document could not be read") && r.warnings[0].contains("no layers"), "{}", r.warnings[0]);
-    let out = export(&r.document, "copy.png", &ExportOptions::default()).unwrap();
+    // Edge colour fill off: the transparent pixel is checked as the preview stored it.
+    let out = export(&r.document, "copy.png", &ExportOptions { png_edge_fill: false, ..Default::default() }).unwrap();
     let img = photocraft_codecs::decode(&out.bytes).unwrap();
     assert_eq!(img.data(), &[220, 40, 60, 255, 0, 0, 0, 0]);
     let native = export(&r.document, "copy.pcraft", &ExportOptions::default()).unwrap();
@@ -82,7 +83,8 @@ fn preview_decoder_preserves_16_bit_gray_and_alpha() {
     let r = import("gray.af", &file(&encoded)).unwrap();
     assert_eq!(r.document.depth, photocraft_color::SampleType::U16);
     assert_eq!(r.document.mode, photocraft_color::ColorMode::Grayscale);
-    let out = export(&r.document, "copy.png", &ExportOptions::default()).unwrap();
+    // Edge colour fill off: the transparent pixel is checked as the preview stored it.
+    let out = export(&r.document, "copy.png", &ExportOptions { png_edge_fill: false, ..Default::default() }).unwrap();
     let decoded = photocraft_codecs::decode(&out.bytes).unwrap();
     assert_eq!(decoded.sample_type(), SampleType::U16);
     assert_eq!(decoded.data(), img.data());

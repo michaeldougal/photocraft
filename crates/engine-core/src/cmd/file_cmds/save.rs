@@ -48,6 +48,9 @@ pub(crate) struct SaveOpts {
     /// PDF: spot channels as overprinting Separation plates (`"pdfSpotPlates"`); on unless the
     /// params say `false`.
     pub pdf_spot_plates: bool,
+    /// PNG: give fully transparent pixels the colour of the nearest visible pixel
+    /// (`"pngEdgeFill"`); on unless the params say `false`.
+    pub png_edge_fill: bool,
     /// PSD/PSB: embed the thumbnail resource (Preferences › File Handling › Image Previews).
     pub image_previews: bool,
     /// PSD/PSB: write the real merged image (Preferences › File Handling › Maximize PSD and PSB
@@ -76,6 +79,7 @@ impl Default for SaveOpts {
             tiff_pyramid: false,
             dds: photocraft_io::DdsOptions::default(),
             pdf_spot_plates: true,
+            png_edge_fill: true,
             image_previews: true,
             psd_maximize_compatibility: true,
             pcraft_full_composite: false,
@@ -108,6 +112,7 @@ impl SaveOpts {
             tiff_pyramid: tiff_bool_param(p, "tiffPyramid", cmd)?.unwrap_or(false),
             dds: dds_param(p, cmd)?.unwrap_or_default(),
             pdf_spot_plates: pdf_spot_plates_param(p, cmd)?,
+            png_edge_fill: png_edge_fill_param(p, cmd)?,
             image_previews: file_handling.image_previews != crate::prefs::Ask::Never,
             psd_maximize_compatibility: maximize_compatibility_param(p, cmd)?.unwrap_or(file_handling.maximize_psd_compatibility != crate::prefs::Ask::Never),
             pcraft_full_composite: pcraft_full_composite_param(p, cmd)?.unwrap_or(file_handling.pcraft_full_composite),
@@ -132,6 +137,16 @@ pub fn pdf_spot_plates_param(p: &Value, cmd: &str) -> Result<bool> {
     match p.get("pdfSpotPlates") {
         None | Some(Value::Null) => Ok(true),
         Some(v) => v.as_bool().ok_or_else(|| EngineError::BadParams { cmd: cmd.into(), msg: format!("`pdfSpotPlates` must be true or false, got {v}") }),
+    }
+}
+
+/// Whether a PNG save in `p` gives fully transparent pixels the colour of the nearest visible
+/// pixel (`"pngEdgeFill": bool`; absent or null: yes, see
+/// [`photocraft_io::ExportOptions::png_edge_fill`]). Anything else is a bad parameter of `cmd`.
+pub fn png_edge_fill_param(p: &Value, cmd: &str) -> Result<bool> {
+    match p.get("pngEdgeFill") {
+        None | Some(Value::Null) => Ok(true),
+        Some(v) => v.as_bool().ok_or_else(|| EngineError::BadParams { cmd: cmd.into(), msg: format!("`pngEdgeFill` must be true or false, got {v}") }),
     }
 }
 
@@ -267,6 +282,7 @@ pub(crate) fn encode(doc: &Document, path: &str, save: impl Into<SaveOpts>) -> R
         tga_bits: save.tga_bits,
         bmp_bits: save.bmp_bits,
         pdf_spot_plates: save.pdf_spot_plates,
+        png_edge_fill: save.png_edge_fill,
         image_previews: save.image_previews,
         psd_maximize_compatibility: save.psd_maximize_compatibility,
         pcraft_full_composite: save.pcraft_full_composite,
