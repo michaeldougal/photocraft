@@ -342,8 +342,8 @@ fn webp_lossy_lossless_transparency_and_metadata() {
     assert!(has(&lossless, b"VP8L") && !has(&lossless, b"VP8 "));
     assert!(!has(&opaque, b"ALPH"), "transparency off composites over the matte");
 
-    // Lossless is the PNG-24 export's pixels exactly.
-    s.execute("file.export.saveForWebLegacy", json!({"format": "png24", "path": path("same.png")})).unwrap();
+    // Lossless is the PNG-24 export's pixels exactly (edge colour fill, a PNG-only step, off).
+    s.execute("file.export.saveForWebLegacy", json!({"format": "png24", "pngEdgeFill": false, "path": path("same.png")})).unwrap();
     let (a, b) = (decode(&path("lossless.webp")), decode(&path("same.png")));
     let rgba = |i: &photocraft_codecs::Image| i.convert(photocraft_codecs::ChannelLayout::Rgba, photocraft_codecs::SampleType::U8).data().to_vec();
     assert_eq!(rgba(&a), rgba(&b));

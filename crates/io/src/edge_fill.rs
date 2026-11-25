@@ -18,7 +18,7 @@ const FLOAT_CLEAR: f32 = 0.5 / 65535.0;
 /// straight-line distance) whose alpha is above zero, keeping its alpha. `false`, and `img`
 /// unchanged, when there is nothing to fill: no alpha channel, no fully transparent pixel, no
 /// visible pixel to take a colour from, or too many pixels to index.
-pub(crate) fn fill_transparent(img: &mut Image) -> bool {
+pub fn fill_transparent(img: &mut Image) -> bool {
     let layout = img.layout();
     if !layout.has_alpha() {
         return false;

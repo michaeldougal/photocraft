@@ -82,6 +82,9 @@ pub struct WebSettings {
     pub embed_icc: bool,
     pub metadata: WebMetadata,
     pub convert_to_srgb: bool,
+    /// PNG-24: give fully transparent pixels the colour of the nearest visible pixel
+    /// (`"pngEdgeFill"`, [`photocraft_io::ExportOptions::png_edge_fill`]); on by default.
+    pub png_edge_fill: bool,
 }
 
 impl Default for WebSettings {
@@ -105,6 +108,7 @@ impl Default for WebSettings {
             embed_icc: false,
             metadata: WebMetadata::Copyright,
             convert_to_srgb: true,
+            png_edge_fill: true,
         }
     }
 }
@@ -177,6 +181,7 @@ impl WebSettings {
             ("optimized", &mut st.optimized),
             ("embedIcc", &mut st.embed_icc),
             ("convertToSrgb", &mut st.convert_to_srgb),
+            ("pngEdgeFill", &mut st.png_edge_fill),
         ] {
             if let Some(b) = flag(k)? {
                 *slot = b;
@@ -265,6 +270,10 @@ impl WebSettings {
         if !self.color_table_edits.is_empty() {
             p["colorTableEdits"] =
                 json!(self.color_table_edits.iter().map(|(i, c)| (i.to_string(), rgb_hex(*c))).collect::<std::collections::BTreeMap<_, _>>());
+        }
+        // Only when off, so the params of an ordinary export stay as they were.
+        if !self.png_edge_fill {
+            p["pngEdgeFill"] = json!(false);
         }
         p
     }

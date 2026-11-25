@@ -157,3 +157,7 @@ pub(super) fn quick_export(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(test)]
 #[path = "quick_jpg_progressive_tests.rs"]
 mod quick_jpg_progressive_tests;
+
+#[cfg(test)]
+#[path = "png_edge_fill_tests.rs"]
+mod png_edge_fill_tests;

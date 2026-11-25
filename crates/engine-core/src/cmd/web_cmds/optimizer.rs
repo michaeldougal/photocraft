@@ -158,7 +158,11 @@ pub fn optimize(
             // The profile only with Embed Color Profile on, as the WebP and JPEG branches do: Quick
             // Export, which never sets it, writes no iCCP chunk (#13798).
             let icc = icc.filter(|_| st.embed_icc);
-            let img = photocraft_codecs::Image::from_u8(ww, hh, layout, data).map_err(e)?.with_icc(icc.map(<[u8]>::to_vec)).with_meta(meta());
+            let mut img = photocraft_codecs::Image::from_u8(ww, hh, layout, data).map_err(e)?.with_icc(icc.map(<[u8]>::to_vec)).with_meta(meta());
+            // Quick Export and Save for Web write PNGs here, not through `photocraft_io::export`.
+            if st.png_edge_fill {
+                photocraft_io::edge_fill::fill_transparent(&mut img);
+            }
             let opts = photocraft_codecs::EncodeOptions {
                 png_interlaced: st.interlaced,
                 embed_icc: icc.is_some(),
